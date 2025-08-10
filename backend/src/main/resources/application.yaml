@@ -3,7 +3,18 @@ server:
 
 spring:
   application:
-    name: ubc-planner-backend
+    name: ubc-planner
+  profiles:
+    default: local
+  datasource:
+    url: jdbc:postgresql://localhost:5432/ubcplanner
+    username: ubc
+    password: ubc
+  jpa:
+    hibernate:
+      ddl-auto: update
+    properties:
+      hibernate.jdbc.time_zone: UTC
 
 management:
   endpoints:
