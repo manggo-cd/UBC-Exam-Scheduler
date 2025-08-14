@@ -1,27 +1,26 @@
 package com.ubcplanner.importer;
 
-import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/admin/import")
-@CrossOrigin // dev only
+@CrossOrigin
 public class ExamImportController {
+
   private final ExamImportService service;
 
   public ExamImportController(ExamImportService service) {
     this.service = service;
   }
 
+  // POST /admin/import/exams?subject=CPSC&course=221&term=2025W&dryRun=true
   @PostMapping("/exams")
-  public ResponseEntity<?> importExams(
-      @RequestParam String subject,
-      @RequestParam String course,
-      @RequestParam String term
+  public ExamImportService.ImportSummary importExams(
+      @RequestParam(required = false) String subject,
+      @RequestParam(required = false) String course,
+      @RequestParam(defaultValue = "2025W") String term,
+      @RequestParam(defaultValue = "true") boolean dryRun
   ) throws Exception {
-    String msg = service.fetchEntry(subject, course, term);
-    return ResponseEntity.ok(new Msg(msg));
+    return service.importBySubjectCourseTerm(subject, course, term, dryRun);
   }
-
-  record Msg(String message) {}
 }

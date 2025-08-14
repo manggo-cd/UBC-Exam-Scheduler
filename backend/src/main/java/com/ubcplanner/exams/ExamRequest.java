@@ -7,8 +7,9 @@ public record ExamRequest(
     @NotBlank String subject,
     @NotBlank String course,
     @NotBlank String section,
-    @NotBlank String startTime,
-    @NotNull  Integer durationMin,
+    @NotBlank String startTime, // ISO-8601
+    @NotNull Integer durationMin,
     String building,
-    String room
+    String room,
+    String campus // optional; if null -> V
 ) {}
