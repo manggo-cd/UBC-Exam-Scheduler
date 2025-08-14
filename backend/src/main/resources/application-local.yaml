@@ -3,14 +3,12 @@ spring:
     url: jdbc:postgresql://localhost:5432/ubcplanner
     username: ubc
     password: ubc
+
   jpa:
     hibernate:
-      ddl-auto: none
+      ddl-auto: update  # dev only
     properties:
       hibernate.jdbc.time_zone: UTC
-  flyway:
-    enabled: true
-    locations: classpath:db/migration
 
 logging:
   level:
@@ -18,5 +16,5 @@ logging:
 
 ubc:
   exams:
-    baseUrl: "https://legacy.students.ubc.ca/exam-schedule"
+    searchUrl: "https://students.ubc.ca/enrolment/exams/exam-schedule"
 

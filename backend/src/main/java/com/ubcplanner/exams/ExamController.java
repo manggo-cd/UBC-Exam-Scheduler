@@ -2,35 +2,37 @@ package com.ubcplanner.exams;
 
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.*;
-
 import java.time.OffsetDateTime;
 import java.util.List;
 
 @RestController
 @RequestMapping("/api/exams")
-@CrossOrigin // dev only
+@CrossOrigin
 public class ExamController {
 
   private final ExamRepository repo;
 
   public ExamController(ExamRepository repo) { this.repo = repo; }
 
-  // GET /api/exams?subject=CPSC&course=221
+  // GET /api/exams?subject=CPSC&course=221&campus=Vancouver
   @GetMapping
-  public List<Exam> list(@RequestParam(required = false) String subject,
-                         @RequestParam(required = false) String course) {
+  public List<Exam> list(
+      @RequestParam(defaultValue = "Vancouver") String campus,
+      @RequestParam(required = false) String subject,
+      @RequestParam(required = false) String course) {
+
     if (subject != null && course != null) {
-      return repo.findBySubjectIgnoreCaseAndCourseIgnoreCaseOrderByStartTimeAsc(subject, course);
+      return repo.findByCampusIgnoreCaseAndSubjectIgnoreCaseAndCourseIgnoreCaseOrderByStartTimeAsc(
+          campus, subject, course);
     } else if (subject != null) {
-      return repo.findBySubjectIgnoreCaseOrderByStartTimeAsc(subject);
+      return repo.findByCampusIgnoreCaseAndSubjectIgnoreCaseOrderByStartTimeAsc(campus, subject);
     }
-    return repo.findAll();
+    return repo.findByCampusIgnoreCaseOrderByStartTimeAsc(campus);
   }
 
-  // POST /api/exams (validated)
+  // POST /api/exams  (body = ExamRequest without campus)
   @PostMapping
   public Exam create(@Valid @RequestBody ExamRequest req) {
-    System.out.println(">>> CREATE @ /api/exams (validated)"); // proves this handler is hit
     Exam e = new Exam();
     e.setSubject(req.subject());
     e.setCourse(req.course());
@@ -39,10 +41,12 @@ public class ExamController {
     e.setDurationMin(req.durationMin());
     e.setBuilding(req.building());
     e.setRoom(req.room());
+    e.setCampus("Vancouver");                 // <-- important
     return repo.save(e);
   }
 
-  // DELETE /api/exams/{id}
   @DeleteMapping("/{id}")
-  public void delete(@PathVariable Long id) { repo.deleteById(id); }
+  public void delete(@PathVariable Long id) {
+    repo.deleteById(id);
+  }
 }
