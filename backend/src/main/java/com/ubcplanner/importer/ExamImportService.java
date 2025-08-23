@@ -10,6 +10,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.io.InputStream;
 import java.time.*;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
@@ -17,7 +18,7 @@ import java.util.*;
 @Service
 public class ExamImportService {
 
-  @Value("${ubc.exams.searchUrl}")
+  @Value("${ubc.exams.searchUrl:https://students.ubc.ca/enrolment/exams/exam-schedule}")
   private String searchUrl;
 
   private final ExamRepository repo;
@@ -33,6 +34,7 @@ public class ExamImportService {
 
   public record ImportSummary(int inserted, int updated, int skipped, List<ParsedExam> samples) {}
 
+  /** Existing network-based import (kept for later). */
   @Transactional
   public ImportSummary importBySubjectCourseTerm(String subject, String course, String term, boolean dryRun) throws Exception {
     Document doc = Jsoup.connect(searchUrl)
@@ -45,15 +47,32 @@ public class ExamImportService {
     if (table == null) return new ImportSummary(0, 0, 0, List.of());
 
     List<ParsedExam> parsed = parseRows(table, subject, course, term);
+    ImportSummary summary = upsert(parsed, "V", dryRun);
+    return new ImportSummary(summary.inserted, summary.updated, summary.skipped, parsed.stream().limit(3).toList());
+  }
 
+  /** NEW: import from uploaded HTML InputStream. */
+  @Transactional
+  public ImportSummary importFromUploadedHtml(InputStream in, String campus, String subject, String course, String term, boolean dryRun) throws Exception {
+    Document doc = Jsoup.parse(in, "UTF-8", searchUrl);
+    Element table = findExamTable(doc);
+    if (table == null) return new ImportSummary(0, 0, 0, List.of());
+
+    List<ParsedExam> parsed = parseRows(table, subject, course, term);
+    ImportSummary summary = upsert(parsed, campus == null || campus.isBlank() ? "V" : campus, dryRun);
+    return new ImportSummary(summary.inserted, summary.updated, summary.skipped, parsed.stream().limit(3).toList());
+  }
+
+  // ---------- Upsert helper ----------
+  private ImportSummary upsert(List<ParsedExam> parsed, String campus, boolean dryRun) {
     int inserted = 0, updated = 0, skipped = 0;
+
     if (!dryRun) {
       for (ParsedExam p : parsed) {
-        if (p.startTime() == null) { skipped++; continue; }
+        if (p.startTime() == null) { skipped++; continue; } // DB requires NOT NULL
 
         var existing = repo.findByCampusAndSubjectIgnoreCaseAndCourseIgnoreCaseAndSectionIgnoreCaseAndStartTime(
-            "V", p.subject(), p.course(), p.section(), p.startTime()
-        );
+            campus, p.subject(), p.course(), p.section(), p.startTime());
 
         if (existing.isPresent()) {
           Exam e = existing.get();
@@ -64,7 +83,7 @@ public class ExamImportService {
           if (changed) { repo.save(e); updated++; } else { skipped++; }
         } else {
           Exam e = new Exam();
-          e.setCampus("V");
+          e.setCampus(campus); // e.g., "V"
           e.setSubject(p.subject());
           e.setCourse(p.course());
           e.setSection(p.section());
@@ -78,12 +97,14 @@ public class ExamImportService {
       }
     }
 
-    return new ImportSummary(inserted, updated, skipped, parsed.stream().limit(3).toList());
+    return new ImportSummary(inserted, updated, skipped, List.of());
   }
 
+  // ---------- HTML parsing helpers ----------
   private Element findExamTable(Document doc) {
     for (Element t : doc.select("table")) {
-      String header = t.select("thead th, tr th").text().toLowerCase(Locale.ROOT);
+      Elements ths = t.select("thead th, tr th");
+      String header = ths.text().toLowerCase(Locale.ROOT);
       if (header.contains("course") && header.contains("section") &&
           (header.contains("exam") || header.contains("date")) &&
           (header.contains("time") || header.contains("start"))) {
@@ -95,19 +116,20 @@ public class ExamImportService {
 
   private List<ParsedExam> parseRows(Element table, String subjectFilter, String courseFilter, String term) {
     Map<String, Integer> col = mapHeaderIndexes(table);
-    List<ParsedExam> out = new ArrayList<>();
 
+    List<ParsedExam> out = new ArrayList<>();
     for (Element tr : table.select("tbody tr")) {
       Elements tds = tr.select("td");
       if (tds.isEmpty()) continue;
 
-      String courseStr = textAt(tds, col, "course");
-      String section   = textAt(tds, col, "section");
+      String courseStr = textAt(tds, col, "course");    // e.g., "CPSC 221"
+      String section   = textAt(tds, col, "section");   // "101"
       String dateStr   = textAt(tds, col, "date");
       String timeStr   = textAt(tds, col, "time");
       String building  = textAt(tds, col, "building");
       String room      = textAt(tds, col, "room");
       String duration  = textAt(tds, col, "duration");
+
       if (courseStr == null || section == null) continue;
 
       String[] parts = courseStr.trim().split("\\s+");
@@ -137,7 +159,7 @@ public class ExamImportService {
       if (t.contains("course"))   map.put("course", i);
       if (t.contains("section"))  map.put("section", i);
       if (t.contains("date"))     map.put("date", i);
-      if (t.contains("exam"))     map.putIfAbsent("date", i);
+      if (t.contains("exam"))     map.putIfAbsent("date", i);   // handle "Exam Date"
       if (t.contains("time"))     map.put("time", i);
       if (t.contains("building")) map.put("building", i);
       if (t.contains("room"))     map.put("room", i);
@@ -181,7 +203,8 @@ public class ExamImportService {
       }
     }
 
-    return ZonedDateTime.of(date, time, ZoneId.of("America/Vancouver")).toOffsetDateTime();
+    ZonedDateTime zdt = ZonedDateTime.of(date, time, ZoneId.of("America/Vancouver"));
+    return zdt.toOffsetDateTime();
   }
 
   private Integer parseDuration(String durationCell, String timeCell) {
@@ -189,6 +212,6 @@ public class ExamImportService {
       String digits = durationCell.replaceAll("[^0-9]", "");
       if (!digits.isEmpty()) return Integer.parseInt(digits);
     }
-    return (timeCell != null) ? 120 : null;
+    return (timeCell != null) ? 120 : null; // default if time exists
   }
 }
