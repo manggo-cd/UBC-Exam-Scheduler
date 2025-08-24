@@ -1,6 +1,6 @@
 # UBC Planner
 
-A comprehensive course planning and scheduling application for University of British Columbia students.
+A comprehensive CRUD app for finals scheduling application at the University of British Columbia students.
 
 ## Project Structure
 
