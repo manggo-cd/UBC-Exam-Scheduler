@@ -7,6 +7,7 @@ import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -18,7 +19,7 @@ import java.util.*;
 @Service
 public class ExamImportService {
 
-  @Value("${ubc.exams.searchUrl:https://students.ubc.ca/enrolment/exams/exam-schedule}")
+  @Value("${ubc.exams.searchUrl}")
   private String searchUrl;
 
   private final ExamRepository repo;
@@ -34,56 +35,93 @@ public class ExamImportService {
 
   public record ImportSummary(int inserted, int updated, int skipped, List<ParsedExam> samples) {}
 
-  /** Existing network-based import (kept for later). */
-  @Transactional
-  public ImportSummary importBySubjectCourseTerm(String subject, String course, String term, boolean dryRun) throws Exception {
-    Document doc = Jsoup.connect(searchUrl)
-        .userAgent("UBC-Exam-Scheduler/1.0 (+https://github.com/manggo-cd/UBC-Exam-Scheduler)")
-        .referrer("https://students.ubc.ca/")
-        .timeout(15_000)
-        .get();
-
-    Element table = findExamTable(doc);
-    if (table == null) return new ImportSummary(0, 0, 0, List.of());
-
-    List<ParsedExam> parsed = parseRows(table, subject, course, term);
-    ImportSummary summary = upsert(parsed, "V", dryRun);
-    return new ImportSummary(summary.inserted, summary.updated, summary.skipped, parsed.stream().limit(3).toList());
+  @Transactional(readOnly = true)
+  public ImportSummary importBySubjectCourseTerm(
+      String subject,
+      String course,
+      String term,
+      String campus,
+      boolean dryRun,
+      String source
+  ) throws Exception {
+    Document doc;
+    if ("static".equalsIgnoreCase(source)) {
+      ClassPathResource res = new ClassPathResource("sample/exams.html");
+      if (!res.exists()) {
+        return new ImportSummary(0, 0, 0, List.of());
+      }
+      try (InputStream in = res.getInputStream()) {
+        doc = Jsoup.parse(in, "UTF-8", "");
+      }
+    } else {
+      doc = Jsoup.connect(searchUrl)
+          .userAgent("UBC-Exam-Scheduler/1.0 (+https://github.com/manggo-cd/UBC-Exam-Scheduler)")
+          .referrer("https://students.ubc.ca/")
+          .timeout(15_000)
+          .get();
+    }
+    return importFromDocument(doc, normalizeCampus(campus), subject, course, term, dryRun);
   }
 
-  /** NEW: import from uploaded HTML InputStream. */
-  @Transactional
-  public ImportSummary importFromUploadedHtml(InputStream in, String campus, String subject, String course, String term, boolean dryRun) throws Exception {
-    Document doc = Jsoup.parse(in, "UTF-8", searchUrl);
-    Element table = findExamTable(doc);
-    if (table == null) return new ImportSummary(0, 0, 0, List.of());
-
-    List<ParsedExam> parsed = parseRows(table, subject, course, term);
-    ImportSummary summary = upsert(parsed, campus == null || campus.isBlank() ? "V" : campus, dryRun);
-    return new ImportSummary(summary.inserted, summary.updated, summary.skipped, parsed.stream().limit(3).toList());
+  @Transactional(readOnly = true)
+  public ImportSummary importFromUploadedHtml(
+      InputStream in,
+      String campus,
+      String subject,
+      String course,
+      String term,
+      boolean dryRun
+  ) throws Exception {
+    Document doc = Jsoup.parse(in, "UTF-8", "");
+    return importFromDocument(doc, normalizeCampus(campus), subject, course, term, dryRun);
   }
 
-  // ---------- Upsert helper ----------
-  private ImportSummary upsert(List<ParsedExam> parsed, String campus, boolean dryRun) {
+  private ImportSummary importFromDocument(
+      Document doc,
+      String campus,
+      String subject,
+      String course,
+      String term,
+      boolean dryRun
+  ) {
+    Element table = findExamTable(doc);
+    if (table == null) {
+      return new ImportSummary(0, 0, 0, List.of());
+    }
+
+    List<ParsedExam> parsed = parseRows(table, subject, course, term);
+
     int inserted = 0, updated = 0, skipped = 0;
+    for (ParsedExam p : parsed) {
+      if (p.startTime() == null) { skipped++; continue; }
 
-    if (!dryRun) {
-      for (ParsedExam p : parsed) {
-        if (p.startTime() == null) { skipped++; continue; } // DB requires NOT NULL
+      var existing = repo.findByCampusAndSubjectIgnoreCaseAndCourseIgnoreCaseAndSectionIgnoreCaseAndStartTime(
+          campus, p.subject(), p.course(), p.section(), p.startTime()
+      );
 
-        var existing = repo.findByCampusAndSubjectIgnoreCaseAndCourseIgnoreCaseAndSectionIgnoreCaseAndStartTime(
-            campus, p.subject(), p.course(), p.section(), p.startTime());
+      if (existing.isPresent()) {
+        Exam e = existing.get();
+        boolean changed = false;
+        if (!Objects.equals(e.getDurationMin(), p.durationMin())) { changed = true; }
+        if (!Objects.equals(e.getBuilding(), p.building()))       { changed = true; }
+        if (!Objects.equals(e.getRoom(), p.room()))               { changed = true; }
 
-        if (existing.isPresent()) {
-          Exam e = existing.get();
-          boolean changed = false;
-          if (!Objects.equals(e.getDurationMin(), p.durationMin())) { e.setDurationMin(p.durationMin()); changed = true; }
-          if (!Objects.equals(e.getBuilding(), p.building()))       { e.setBuilding(p.building()); changed = true; }
-          if (!Objects.equals(e.getRoom(), p.room()))               { e.setRoom(p.room()); changed = true; }
-          if (changed) { repo.save(e); updated++; } else { skipped++; }
+        if (changed) {
+          updated++;
+          if (!dryRun) {
+            e.setDurationMin(p.durationMin());
+            e.setBuilding(p.building());
+            e.setRoom(p.room());
+            repo.save(e);
+          }
         } else {
+          skipped++;
+        }
+      } else {
+        inserted++;
+        if (!dryRun) {
           Exam e = new Exam();
-          e.setCampus(campus); // e.g., "V"
+          e.setCampus(campus);
           e.setSubject(p.subject());
           e.setCourse(p.course());
           e.setSection(p.section());
@@ -92,15 +130,14 @@ public class ExamImportService {
           e.setBuilding(p.building());
           e.setRoom(p.room());
           repo.save(e);
-          inserted++;
         }
       }
     }
 
-    return new ImportSummary(inserted, updated, skipped, List.of());
+    List<ParsedExam> samples = parsed.stream().limit(3).toList();
+    return new ImportSummary(inserted, updated, skipped, samples);
   }
 
-  // ---------- HTML parsing helpers ----------
   private Element findExamTable(Document doc) {
     for (Element t : doc.select("table")) {
       Elements ths = t.select("thead th, tr th");
@@ -122,8 +159,8 @@ public class ExamImportService {
       Elements tds = tr.select("td");
       if (tds.isEmpty()) continue;
 
-      String courseStr = textAt(tds, col, "course");    // e.g., "CPSC 221"
-      String section   = textAt(tds, col, "section");   // "101"
+      String courseStr = textAt(tds, col, "course");
+      String section   = textAt(tds, col, "section");
       String dateStr   = textAt(tds, col, "date");
       String timeStr   = textAt(tds, col, "time");
       String building  = textAt(tds, col, "building");
@@ -159,7 +196,7 @@ public class ExamImportService {
       if (t.contains("course"))   map.put("course", i);
       if (t.contains("section"))  map.put("section", i);
       if (t.contains("date"))     map.put("date", i);
-      if (t.contains("exam"))     map.putIfAbsent("date", i);   // handle "Exam Date"
+      if (t.contains("exam"))     map.putIfAbsent("date", i);   // “Exam Date”
       if (t.contains("time"))     map.put("time", i);
       if (t.contains("building")) map.put("building", i);
       if (t.contains("room"))     map.put("room", i);
@@ -212,6 +249,13 @@ public class ExamImportService {
       String digits = durationCell.replaceAll("[^0-9]", "");
       if (!digits.isEmpty()) return Integer.parseInt(digits);
     }
-    return (timeCell != null) ? 120 : null; // default if time exists
+    return (timeCell != null) ? 120 : null;
+  }
+
+  private String normalizeCampus(String campus) {
+    if (campus == null || campus.isBlank()) return "V";
+    String c = campus.trim();
+    if (c.equalsIgnoreCase("Vancouver") || c.equalsIgnoreCase("V")) return "V";
+    return c;
   }
 }

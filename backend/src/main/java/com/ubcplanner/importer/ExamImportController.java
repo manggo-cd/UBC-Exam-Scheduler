@@ -15,26 +15,30 @@ public class ExamImportController {
     this.service = service;
   }
 
-  // Existing subject/course/term importer (kept if you already had it)
-  @PostMapping("/exams")
+  @PostMapping(path = "/exams", produces = MediaType.APPLICATION_JSON_VALUE)
   public ExamImportService.ImportSummary importByQuery(
       @RequestParam(required = false) String subject,
       @RequestParam(required = false) String course,
       @RequestParam(required = false) String term,
-      @RequestParam(defaultValue = "true") boolean dryRun
+      @RequestParam(defaultValue = "V") String campus,
+      @RequestParam(defaultValue = "true") boolean dryRun,
+      @RequestParam(defaultValue = "static") String source // static | live
   ) throws Exception {
-    return service.importBySubjectCourseTerm(subject, course, term, dryRun);
+    return service.importBySubjectCourseTerm(subject, course, term, campus, dryRun, source);
   }
 
-  // NEW: Upload HTML file (multipart) and import
-  @PostMapping(path = "/exams/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+  @PostMapping(
+      path = "/exams/upload",
+      consumes = MediaType.MULTIPART_FORM_DATA_VALUE,
+      produces = MediaType.APPLICATION_JSON_VALUE
+  )
   public ExamImportService.ImportSummary importFromUpload(
-      @RequestPart("file") MultipartFile file,
+      @RequestParam("file") MultipartFile file,
       @RequestParam(defaultValue = "V") String campus,
       @RequestParam(required = false) String subject,
       @RequestParam(required = false) String course,
       @RequestParam(required = false) String term,
-      @RequestParam(defaultValue = "false") boolean dryRun
+      @RequestParam(defaultValue = "true") boolean dryRun
   ) throws Exception {
     try (var in = file.getInputStream()) {
       return service.importFromUploadedHtml(in, campus, subject, course, term, dryRun);
