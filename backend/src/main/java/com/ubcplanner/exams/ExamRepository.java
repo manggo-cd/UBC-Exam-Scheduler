@@ -10,17 +10,18 @@ import java.util.Optional;
 
 public interface ExamRepository extends JpaRepository<Exam, Long> {
 
-  // Existing list filters
+  // List filters
   List<Exam> findByCampusIgnoreCaseOrderByStartTimeAsc(String campus);
   List<Exam> findByCampusIgnoreCaseAndSubjectIgnoreCaseOrderByStartTimeAsc(String campus, String subject);
-  List<Exam> findByCampusIgnoreCaseAndSubjectIgnoreCaseAndCourseIgnoreCaseOrderByStartTimeAsc(String campus, String subject, String course);
+  List<Exam> findByCampusIgnoreCaseAndSubjectIgnoreCaseAndCourseIgnoreCaseOrderByStartTimeAsc(
+      String campus, String subject, String course);
 
   // Upsert lookup (includes campus)
   Optional<Exam> findByCampusAndSubjectIgnoreCaseAndCourseIgnoreCaseAndSectionIgnoreCaseAndStartTime(
       String campus, String subject, String course, String section, OffsetDateTime startTime
   );
 
-  // NEW: distinct catalogs (used by frontend)
+  // Catalog lookups for dropdowns
   @Query("""
          select distinct upper(e.subject) from Exam e
          where lower(e.campus) = lower(:campus)
@@ -43,5 +44,7 @@ public interface ExamRepository extends JpaRepository<Exam, Long> {
            and lower(e.course)  = lower(:course)
          order by e.section
          """)
-  List<String> distinctSections(@Param("campus") String campus, @Param("subject") String subject, @Param("course") String course);
+  List<String> distinctSections(@Param("campus") String campus,
+                                @Param("subject") String subject,
+                                @Param("course") String course);
 }
