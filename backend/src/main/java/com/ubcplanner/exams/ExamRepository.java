@@ -1,5 +1,7 @@
 package com.ubcplanner.exams;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -10,16 +12,11 @@ import java.util.Optional;
 
 public interface ExamRepository extends JpaRepository<Exam, Long> {
 
-    // ---------- List filters ----------
+    // ---------- List filters (legacy list endpoints) ----------
     List<Exam> findByCampusIgnoreCaseOrderByStartTimeAsc(String campus);
-
-    List<Exam> findByCampusIgnoreCaseAndSubjectIgnoreCaseOrderByStartTimeAsc(
-            String campus, String subject
-    );
-
+    List<Exam> findByCampusIgnoreCaseAndSubjectIgnoreCaseOrderByStartTimeAsc(String campus, String subject);
     List<Exam> findByCampusIgnoreCaseAndSubjectIgnoreCaseAndCourseIgnoreCaseOrderByStartTimeAsc(
-            String campus, String subject, String course
-    );
+            String campus, String subject, String course);
 
     // ---------- Upsert lookup (includes campus) ----------
     Optional<Exam> findByCampusAndSubjectIgnoreCaseAndCourseIgnoreCaseAndSectionIgnoreCaseAndStartTime(
@@ -57,22 +54,20 @@ public interface ExamRepository extends JpaRepository<Exam, Long> {
                                       @Param("subject") String subject,
                                       @Param("course") String course);
 
-    // ---------- (Optional) Back-compat aliases ----------
-    // If any existing code calls your old names, keep these delegating defaults.
-    // Remove them if not needed.
+    // ---------- Pageable finders for /api/exams/search ----------
+    Page<Exam> findByCampusIgnoreCase(String campus, Pageable pageable);
 
-    @Deprecated
-    default List<String> distinctSubjects(String campus) {
-        return findDistinctSubjects(campus);
-    }
+    Page<Exam> findByCampusIgnoreCaseAndSubjectIgnoreCase(
+            String campus, String subject, Pageable pageable);
 
-    @Deprecated
-    default List<String> distinctCourses(String campus, String subject) {
-        return findDistinctCourses(campus, subject);
-    }
+    Page<Exam> findByCampusIgnoreCaseAndSubjectIgnoreCaseAndCourseIgnoreCase(
+            String campus, String subject, String course, Pageable pageable);
 
-    @Deprecated
-    default List<String> distinctSections(String campus, String subject, String course) {
-        return findDistinctSections(campus, subject, course);
-    }
+    Page<Exam> findByCampusIgnoreCaseAndSubjectIgnoreCaseAndCourseIgnoreCaseAndSectionIgnoreCase(
+            String campus, String subject, String course, String section, Pageable pageable);
+
+    // ---------- Back-compat aliases (optional) ----------
+    @Deprecated default List<String> distinctSubjects(String campus) { return findDistinctSubjects(campus); }
+    @Deprecated default List<String> distinctCourses(String campus, String subject) { return findDistinctCourses(campus, subject); }
+    @Deprecated default List<String> distinctSections(String campus, String subject, String course) { return findDistinctSections(campus, subject, course); }
 }
