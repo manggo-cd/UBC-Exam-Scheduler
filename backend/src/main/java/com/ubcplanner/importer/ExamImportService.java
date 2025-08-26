@@ -1,5 +1,8 @@
 package com.ubcplanner.importer;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.ubcplanner.exams.Exam;
 import com.ubcplanner.exams.ExamRepository;
 import org.jsoup.Jsoup;
@@ -7,6 +10,7 @@ import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -18,7 +22,9 @@ import java.util.*;
 @Service
 public class ExamImportService {
 
-  @Value("${ubc.exams.searchUrl:https://students.ubc.ca/enrolment/exams/exam-schedule}")
+  private static final Logger log = LoggerFactory.getLogger(ExamImportService.class);
+
+  @Value("${ubc.exams.searchUrl}")
   private String searchUrl;
 
   private final ExamRepository repo;
@@ -34,56 +40,93 @@ public class ExamImportService {
 
   public record ImportSummary(int inserted, int updated, int skipped, List<ParsedExam> samples) {}
 
-  /** Existing network-based import (kept for later). */
   @Transactional
-  public ImportSummary importBySubjectCourseTerm(String subject, String course, String term, boolean dryRun) throws Exception {
-    Document doc = Jsoup.connect(searchUrl)
-        .userAgent("UBC-Exam-Scheduler/1.0 (+https://github.com/manggo-cd/UBC-Exam-Scheduler)")
-        .referrer("https://students.ubc.ca/")
-        .timeout(15_000)
-        .get();
-
-    Element table = findExamTable(doc);
-    if (table == null) return new ImportSummary(0, 0, 0, List.of());
-
-    List<ParsedExam> parsed = parseRows(table, subject, course, term);
-    ImportSummary summary = upsert(parsed, "V", dryRun);
-    return new ImportSummary(summary.inserted, summary.updated, summary.skipped, parsed.stream().limit(3).toList());
+  public ImportSummary importBySubjectCourseTerm(
+      String subject,
+      String course,
+      String term,
+      String campus,
+      boolean dryRun,
+      String source
+  ) throws Exception {
+    Document doc;
+    if ("static".equalsIgnoreCase(source)) {
+      ClassPathResource res = new ClassPathResource("sample/exams.html");
+      if (!res.exists()) {
+        return new ImportSummary(0, 0, 0, List.of());
+      }
+      try (InputStream in = res.getInputStream()) {
+        doc = Jsoup.parse(in, "UTF-8", "");
+      }
+    } else {
+      doc = Jsoup.connect(searchUrl)
+          .userAgent("UBC-Exam-Scheduler/1.0 (+https://github.com/manggo-cd/UBC-Exam-Scheduler)")
+          .referrer("https://students.ubc.ca/")
+          .timeout(15_000)
+          .get();
+    }
+    return importFromDocument(doc, normalizeCampus(campus), subject, course, term, dryRun);
   }
 
-  /** NEW: import from uploaded HTML InputStream. */
   @Transactional
-  public ImportSummary importFromUploadedHtml(InputStream in, String campus, String subject, String course, String term, boolean dryRun) throws Exception {
-    Document doc = Jsoup.parse(in, "UTF-8", searchUrl);
-    Element table = findExamTable(doc);
-    if (table == null) return new ImportSummary(0, 0, 0, List.of());
-
-    List<ParsedExam> parsed = parseRows(table, subject, course, term);
-    ImportSummary summary = upsert(parsed, campus == null || campus.isBlank() ? "V" : campus, dryRun);
-    return new ImportSummary(summary.inserted, summary.updated, summary.skipped, parsed.stream().limit(3).toList());
+  public ImportSummary importFromUploadedHtml(
+      InputStream in,
+      String campus,
+      String subject,
+      String course,
+      String term,
+      boolean dryRun
+  ) throws Exception {
+    Document doc = Jsoup.parse(in, "UTF-8", "");
+    return importFromDocument(doc, normalizeCampus(campus), subject, course, term, dryRun);
   }
 
-  // ---------- Upsert helper ----------
-  private ImportSummary upsert(List<ParsedExam> parsed, String campus, boolean dryRun) {
+  private ImportSummary importFromDocument(
+      Document doc,
+      String campus,
+      String subject,
+      String course,
+      String term,
+      boolean dryRun
+  ) {
+    Element table = findExamTable(doc);
+    if (table == null) {
+      return new ImportSummary(0, 0, 0, List.of());
+    }
+
+    List<ParsedExam> parsed = parseRows(table, subject, course, term);
+
     int inserted = 0, updated = 0, skipped = 0;
+    for (ParsedExam p : parsed) {
+      if (p.startTime() == null) { skipped++; continue; }
 
-    if (!dryRun) {
-      for (ParsedExam p : parsed) {
-        if (p.startTime() == null) { skipped++; continue; } // DB requires NOT NULL
+      var existing = repo.findByCampusAndSubjectIgnoreCaseAndCourseIgnoreCaseAndSectionIgnoreCaseAndStartTime(
+          campus, p.subject(), p.course(), p.section(), p.startTime()
+      );
 
-        var existing = repo.findByCampusAndSubjectIgnoreCaseAndCourseIgnoreCaseAndSectionIgnoreCaseAndStartTime(
-            campus, p.subject(), p.course(), p.section(), p.startTime());
+      if (existing.isPresent()) {
+        Exam e = existing.get();
+        boolean changed = false;
+        if (!Objects.equals(e.getDurationMin(), p.durationMin())) { changed = true; }
+        if (!Objects.equals(e.getBuilding(), p.building()))       { changed = true; }
+        if (!Objects.equals(e.getRoom(), p.room()))               { changed = true; }
 
-        if (existing.isPresent()) {
-          Exam e = existing.get();
-          boolean changed = false;
-          if (!Objects.equals(e.getDurationMin(), p.durationMin())) { e.setDurationMin(p.durationMin()); changed = true; }
-          if (!Objects.equals(e.getBuilding(), p.building()))       { e.setBuilding(p.building()); changed = true; }
-          if (!Objects.equals(e.getRoom(), p.room()))               { e.setRoom(p.room()); changed = true; }
-          if (changed) { repo.save(e); updated++; } else { skipped++; }
+        if (changed) {
+          updated++;
+          if (!dryRun) {
+            e.setDurationMin(p.durationMin());
+            e.setBuilding(p.building());
+            e.setRoom(p.room());
+            repo.save(e);
+          }
         } else {
+          skipped++;
+        }
+      } else {
+        inserted++;
+        if (!dryRun) {
           Exam e = new Exam();
-          e.setCampus(campus); // e.g., "V"
+          e.setCampus(campus);
           e.setSubject(p.subject());
           e.setCourse(p.course());
           e.setSection(p.section());
@@ -92,15 +135,14 @@ public class ExamImportService {
           e.setBuilding(p.building());
           e.setRoom(p.room());
           repo.save(e);
-          inserted++;
         }
       }
     }
 
-    return new ImportSummary(inserted, updated, skipped, List.of());
+    List<ParsedExam> samples = parsed.stream().limit(3).toList();
+    return new ImportSummary(inserted, updated, skipped, samples);
   }
 
-  // ---------- HTML parsing helpers ----------
   private Element findExamTable(Document doc) {
     for (Element t : doc.select("table")) {
       Elements ths = t.select("thead th, tr th");
@@ -122,8 +164,8 @@ public class ExamImportService {
       Elements tds = tr.select("td");
       if (tds.isEmpty()) continue;
 
-      String courseStr = textAt(tds, col, "course");    // e.g., "CPSC 221"
-      String section   = textAt(tds, col, "section");   // "101"
+      String courseStr = textAt(tds, col, "course");
+      String section   = textAt(tds, col, "section");
       String dateStr   = textAt(tds, col, "date");
       String timeStr   = textAt(tds, col, "time");
       String building  = textAt(tds, col, "building");
@@ -139,7 +181,9 @@ public class ExamImportService {
       if (subjectFilter != null && !subject.equalsIgnoreCase(subjectFilter)) continue;
       if (courseFilter  != null && !course.equalsIgnoreCase(courseFilter))   continue;
 
+      log.info("DEBUG dateStr='{}' timeStr='{}'", dateStr, timeStr);
       OffsetDateTime start = parseDateTimeVancouver(dateStr, timeStr, term);
+      log.info("DEBUG start='{}'", start);
       Integer durMin = parseDuration(duration, timeStr);
 
       out.add(new ParsedExam(subject, course, section, start, durMin, emptyToNull(building), emptyToNull(room)));
@@ -159,7 +203,7 @@ public class ExamImportService {
       if (t.contains("course"))   map.put("course", i);
       if (t.contains("section"))  map.put("section", i);
       if (t.contains("date"))     map.put("date", i);
-      if (t.contains("exam"))     map.putIfAbsent("date", i);   // handle "Exam Date"
+      if (t.contains("exam"))     map.putIfAbsent("date", i);   // “Exam Date”
       if (t.contains("time"))     map.put("time", i);
       if (t.contains("building")) map.put("building", i);
       if (t.contains("room"))     map.put("room", i);
@@ -181,30 +225,68 @@ public class ExamImportService {
 
   private OffsetDateTime parseDateTimeVancouver(String dateStr, String timeStr, String term) {
     if (dateStr == null || timeStr == null) return null;
-
-    DateTimeFormatter dateFmt1 = DateTimeFormatter.ofPattern("MMM d, uuuu", Locale.CANADA);
-    DateTimeFormatter dateFmt2 = DateTimeFormatter.ofPattern("MMMM d, uuuu", Locale.CANADA);
-
-    LocalDate date;
-    try { date = LocalDate.parse(dateStr, dateFmt1); }
-    catch (Exception ex1) {
-      try { date = LocalDate.parse(dateStr, dateFmt2); }
-      catch (Exception ex2) { return null; }
+  
+    String d = normalizeWs(dateStr);
+    String t = normalizeWs(timeStr);
+  
+    // If time is a range like "9:00 AM - 12:00 PM", take the start
+    int dash = t.indexOf('-');
+    if (dash > 0) t = t.substring(0, dash).trim();
+  
+    // Extract date like "Dec 15, 2025" (month abbr, day, year)
+    java.util.regex.Matcher dm = DATE_RE.matcher(d);
+    if (!dm.find()) {
+      log.warn("DATE PARSE FAIL: '{}'", d);
+      return null;
     }
-
-    LocalTime time;
-    try {
-      time = LocalTime.parse(timeStr.toUpperCase(Locale.ROOT).replace(" ", ""));
-    } catch (Exception ex) {
-      try {
-        time = LocalTime.parse(timeStr, DateTimeFormatter.ofPattern("h:mm a", Locale.CANADA));
-      } catch (Exception ex2) {
-        return null;
-      }
+    String monAbbr = dm.group(1);
+    int day  = Integer.parseInt(dm.group(2));
+    int year = Integer.parseInt(dm.group(3));
+    int month = monthFromAbbr(monAbbr);
+  
+    // Extract time like "9:00 AM" or "15:30"
+    java.util.regex.Matcher tm = TIME_RE.matcher(t);
+    if (!tm.find()) {
+      log.warn("TIME PARSE FAIL: '{}'", t);
+      return null;
     }
-
-    ZonedDateTime zdt = ZonedDateTime.of(date, time, ZoneId.of("America/Vancouver"));
-    return zdt.toOffsetDateTime();
+    int hour   = Integer.parseInt(tm.group(1));
+    int minute = Integer.parseInt(tm.group(2));
+    String ampm = tm.group(3); // may be null for 24h format
+  
+    if (ampm != null) {
+      if (ampm.equalsIgnoreCase("PM") && hour != 12) hour += 12;
+      if (ampm.equalsIgnoreCase("AM") && hour == 12) hour = 0;
+    }
+  
+    LocalDate date = LocalDate.of(year, month, day);
+    LocalTime time = LocalTime.of(hour, minute);
+    return ZonedDateTime.of(date, time, ZoneId.of("America/Vancouver")).toOffsetDateTime();
+  }
+  
+  // --- helpers and patterns ---
+  
+  private static final java.util.regex.Pattern DATE_RE =
+      java.util.regex.Pattern.compile("(?i)\\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\\b\\s+(\\d{1,2}),\\s*(\\d{4})");
+  
+  private static final java.util.regex.Pattern TIME_RE =
+      java.util.regex.Pattern.compile("(\\d{1,2}):(\\d{2})\\s*(AM|PM|am|pm)?");
+  
+  // Replace NBSPs and narrow NBSPs, then trim
+  private static String normalizeWs(String s) {
+    return s.replace('\u00A0', ' ')
+            .replace('\u202F', ' ')
+            .trim();
+  }
+  
+  private static int monthFromAbbr(String abbr) {
+    String m = abbr.substring(0, 3).toLowerCase(Locale.ROOT);
+    return switch (m) {
+      case "jan" -> 1; case "feb" -> 2; case "mar" -> 3; case "apr" -> 4;
+      case "may" -> 5; case "jun" -> 6; case "jul" -> 7; case "aug" -> 8;
+      case "sep" -> 9; case "oct" -> 10; case "nov" -> 11; case "dec" -> 12;
+      default -> throw new IllegalArgumentException("Unknown month: " + abbr);
+    };
   }
 
   private Integer parseDuration(String durationCell, String timeCell) {
@@ -212,6 +294,13 @@ public class ExamImportService {
       String digits = durationCell.replaceAll("[^0-9]", "");
       if (!digits.isEmpty()) return Integer.parseInt(digits);
     }
-    return (timeCell != null) ? 120 : null; // default if time exists
+    return (timeCell != null) ? 120 : null;
+  }
+
+  private String normalizeCampus(String campus) {
+    if (campus == null || campus.isBlank()) return "V";
+    String c = campus.trim();
+    if (c.equalsIgnoreCase("Vancouver") || c.equalsIgnoreCase("V")) return "V";
+    return c;
   }
 }
