@@ -1,5 +1,8 @@
 package com.ubcplanner.importer;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.ubcplanner.exams.Exam;
 import com.ubcplanner.exams.ExamRepository;
 import org.jsoup.Jsoup;
@@ -19,6 +22,8 @@ import java.util.*;
 @Service
 public class ExamImportService {
 
+  private static final Logger log = LoggerFactory.getLogger(ExamImportService.class);
+
   @Value("${ubc.exams.searchUrl}")
   private String searchUrl;
 
@@ -35,7 +40,7 @@ public class ExamImportService {
 
   public record ImportSummary(int inserted, int updated, int skipped, List<ParsedExam> samples) {}
 
-  @Transactional(readOnly = true)
+  @Transactional
   public ImportSummary importBySubjectCourseTerm(
       String subject,
       String course,
@@ -63,7 +68,7 @@ public class ExamImportService {
     return importFromDocument(doc, normalizeCampus(campus), subject, course, term, dryRun);
   }
 
-  @Transactional(readOnly = true)
+  @Transactional
   public ImportSummary importFromUploadedHtml(
       InputStream in,
       String campus,
@@ -176,7 +181,9 @@ public class ExamImportService {
       if (subjectFilter != null && !subject.equalsIgnoreCase(subjectFilter)) continue;
       if (courseFilter  != null && !course.equalsIgnoreCase(courseFilter))   continue;
 
+      log.info("DEBUG dateStr='{}' timeStr='{}'", dateStr, timeStr);
       OffsetDateTime start = parseDateTimeVancouver(dateStr, timeStr, term);
+      log.info("DEBUG start='{}'", start);
       Integer durMin = parseDuration(duration, timeStr);
 
       out.add(new ParsedExam(subject, course, section, start, durMin, emptyToNull(building), emptyToNull(room)));
@@ -218,30 +225,68 @@ public class ExamImportService {
 
   private OffsetDateTime parseDateTimeVancouver(String dateStr, String timeStr, String term) {
     if (dateStr == null || timeStr == null) return null;
-
-    DateTimeFormatter dateFmt1 = DateTimeFormatter.ofPattern("MMM d, uuuu", Locale.CANADA);
-    DateTimeFormatter dateFmt2 = DateTimeFormatter.ofPattern("MMMM d, uuuu", Locale.CANADA);
-
-    LocalDate date;
-    try { date = LocalDate.parse(dateStr, dateFmt1); }
-    catch (Exception ex1) {
-      try { date = LocalDate.parse(dateStr, dateFmt2); }
-      catch (Exception ex2) { return null; }
+  
+    String d = normalizeWs(dateStr);
+    String t = normalizeWs(timeStr);
+  
+    // If time is a range like "9:00 AM - 12:00 PM", take the start
+    int dash = t.indexOf('-');
+    if (dash > 0) t = t.substring(0, dash).trim();
+  
+    // Extract date like "Dec 15, 2025" (month abbr, day, year)
+    java.util.regex.Matcher dm = DATE_RE.matcher(d);
+    if (!dm.find()) {
+      log.warn("DATE PARSE FAIL: '{}'", d);
+      return null;
     }
-
-    LocalTime time;
-    try {
-      time = LocalTime.parse(timeStr.toUpperCase(Locale.ROOT).replace(" ", ""));
-    } catch (Exception ex) {
-      try {
-        time = LocalTime.parse(timeStr, DateTimeFormatter.ofPattern("h:mm a", Locale.CANADA));
-      } catch (Exception ex2) {
-        return null;
-      }
+    String monAbbr = dm.group(1);
+    int day  = Integer.parseInt(dm.group(2));
+    int year = Integer.parseInt(dm.group(3));
+    int month = monthFromAbbr(monAbbr);
+  
+    // Extract time like "9:00 AM" or "15:30"
+    java.util.regex.Matcher tm = TIME_RE.matcher(t);
+    if (!tm.find()) {
+      log.warn("TIME PARSE FAIL: '{}'", t);
+      return null;
     }
-
-    ZonedDateTime zdt = ZonedDateTime.of(date, time, ZoneId.of("America/Vancouver"));
-    return zdt.toOffsetDateTime();
+    int hour   = Integer.parseInt(tm.group(1));
+    int minute = Integer.parseInt(tm.group(2));
+    String ampm = tm.group(3); // may be null for 24h format
+  
+    if (ampm != null) {
+      if (ampm.equalsIgnoreCase("PM") && hour != 12) hour += 12;
+      if (ampm.equalsIgnoreCase("AM") && hour == 12) hour = 0;
+    }
+  
+    LocalDate date = LocalDate.of(year, month, day);
+    LocalTime time = LocalTime.of(hour, minute);
+    return ZonedDateTime.of(date, time, ZoneId.of("America/Vancouver")).toOffsetDateTime();
+  }
+  
+  // --- helpers and patterns ---
+  
+  private static final java.util.regex.Pattern DATE_RE =
+      java.util.regex.Pattern.compile("(?i)\\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\\b\\s+(\\d{1,2}),\\s*(\\d{4})");
+  
+  private static final java.util.regex.Pattern TIME_RE =
+      java.util.regex.Pattern.compile("(\\d{1,2}):(\\d{2})\\s*(AM|PM|am|pm)?");
+  
+  // Replace NBSPs and narrow NBSPs, then trim
+  private static String normalizeWs(String s) {
+    return s.replace('\u00A0', ' ')
+            .replace('\u202F', ' ')
+            .trim();
+  }
+  
+  private static int monthFromAbbr(String abbr) {
+    String m = abbr.substring(0, 3).toLowerCase(Locale.ROOT);
+    return switch (m) {
+      case "jan" -> 1; case "feb" -> 2; case "mar" -> 3; case "apr" -> 4;
+      case "may" -> 5; case "jun" -> 6; case "jul" -> 7; case "aug" -> 8;
+      case "sep" -> 9; case "oct" -> 10; case "nov" -> 11; case "dec" -> 12;
+      default -> throw new IllegalArgumentException("Unknown month: " + abbr);
+    };
   }
 
   private Integer parseDuration(String durationCell, String timeCell) {
