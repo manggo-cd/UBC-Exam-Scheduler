@@ -1,75 +1,57 @@
-# UBC Planner Frontend
+# UBC Exam Planner
 
-This directory will contain the Angular frontend application for UBC Planner.
+## Project info
 
-## Status
+A web application to help UBC students schedule and manage their exams.
 
-🚧 **Coming Soon** 🚧
+## How can I edit this code?
 
-The frontend development will begin after the backend is stable and the basic API endpoints are established.
+**Use your preferred IDE**
 
-## Planned Features
+Clone this repo and push changes to work locally using your own IDE.
 
-- **Course Catalog**: Browse and search UBC courses
-- **Schedule Builder**: Create and manage course schedules
-- **Degree Planning**: Plan your degree requirements
-- **Registration Tools**: Tools to help with course registration
-- **Responsive Design**: Mobile-first approach for all devices
+The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
 
-## Technology Stack
+Follow these steps:
 
-- **Framework**: Angular (latest stable version)
-- **Styling**: Angular Material + Custom CSS
-- **State Management**: NgRx (if needed)
-- **Testing**: Jasmine + Karma
-- **Build Tool**: Angular CLI
+```sh
+# Step 1: Clone the repository using the project's Git URL.
+git clone <YOUR_GIT_URL>
 
-## Development Setup
+# Step 2: Navigate to the project directory.
+cd <YOUR_PROJECT_NAME>
 
-Once development begins:
+# Step 3: Install the necessary dependencies.
+npm i
 
-```bash
-# Install Angular CLI globally
-npm install -g @angular/cli
-
-# Navigate to frontend directory
-cd frontend
-
-# Install dependencies
-npm install
-
-# Start development server
-ng serve
+# Step 4: Start the development server with auto-reloading and an instant preview.
+npm run dev
 ```
 
-## Project Structure
+**Edit a file directly in GitHub**
 
-```
-frontend/
-├─ src/
-│  ├─ app/
-│  │  ├─ components/     ← Reusable UI components
-│  │  ├─ services/       ← API services
-│  │  ├─ models/         ← Data models
-│  │  ├─ pages/          ← Page components
-│  │  └─ shared/         ← Shared utilities
-│  ├─ assets/            ← Static assets
-│  └─ styles/            ← Global styles
-├─ package.json           ← Dependencies
-└─ angular.json           ← Angular configuration
-```
+- Navigate to the desired file(s).
+- Click the "Edit" button (pencil icon) at the top right of the file view.
+- Make your changes and commit the changes.
 
-## API Integration
+**Use GitHub Codespaces**
 
-The frontend will integrate with the Spring Boot backend API endpoints for:
-- Course data retrieval
-- User authentication
-- Schedule management
-- Degree requirement checking
+- Navigate to the main page of your repository.
+- Click on the "Code" button (green button) near the top right.
+- Select the "Codespaces" tab.
+- Click on "New codespace" to launch a new Codespace environment.
+- Edit files directly within the Codespace and commit and push your changes once you're done.
 
-## Design Principles
+## What technologies are used for this project?
 
-- **Accessibility First**: WCAG 2.1 AA compliance
-- **Mobile First**: Responsive design starting from mobile
-- **Performance**: Fast loading and smooth interactions
-- **User Experience**: Intuitive navigation and clear information hierarchy
+This project is built with:
+
+- Vite
+- TypeScript
+- React
+- shadcn-ui
+- Tailwind CSS
+
+## How can I deploy this project?
+
+This project can be deployed to any static hosting service like Vercel, Netlify, or GitHub Pages. Build the project using `npm run build` and deploy the `dist` folder.
