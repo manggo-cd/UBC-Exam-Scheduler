@@ -1,7 +1,9 @@
 version: "3.9"
+
 services:
   db:
     image: postgres:16
+    container_name: ubc_db
     environment:
       POSTGRES_USER: ubc
       POSTGRES_PASSWORD: ubc
@@ -10,5 +12,44 @@ services:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ubc -d ubcplanner"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  backend:
+    # expects backend/Dockerfile that builds your Spring Boot jar
+    build:
+      context: ./backend
+    container_name: ubc_backend
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/ubcplanner
+      SPRING_DATASOURCE_USERNAME: ubc
+      SPRING_DATASOURCE_PASSWORD: ubc
+      # Optional:
+      # SPRING_PROFILES_ACTIVE: prod
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+    restart: unless-stopped
+
+  frontend:
+    # expects frontend/Dockerfile and frontend/nginx.conf
+    build:
+      context: ./frontend
+      args:
+        # If your React build output is "build" (CRA), set BUILD_DIR=build
+        BUILD_DIR: dist
+    container_name: ubc_frontend
+    depends_on:
+      - backend
+    ports:
+      - "80:80"
+    restart: unless-stopped
+
 volumes:
   pgdata:
