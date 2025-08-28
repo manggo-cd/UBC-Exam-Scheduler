@@ -6,7 +6,7 @@
     "rewrites": [
       {
         "source": "/api/(.*)",
-        "destination": "https://YOUR-BACKEND-DOMAIN/api/$1"
+        "destination": "https://ubc-exam-scheduler.onrender.com"
       }
     ],
     "routes": [
