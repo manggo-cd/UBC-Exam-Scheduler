@@ -1,20 +1,18 @@
-// frontend/src/lib/api.ts
-// Configurable API base with safe coercion
-
 function resolveApiBase(): string {
-  // Pull from Vite or CRA-style envs if present
-  const vite = (typeof import.meta !== "undefined" && (import.meta as any).env?.VITE_API_BASE_URL);
-  const cra  = (typeof process !== "undefined" && (process as any).env?.REACT_APP_API_BASE_URL);
+  const candidates: unknown[] = [
+    // Vite
+    (typeof import.meta !== "undefined" && (import.meta as any).env?.VITE_API_BASE),
+    (typeof import.meta !== "undefined" && (import.meta as any).env?.VITE_API_BASE_URL),
+    // CRA-style (fallback)
+    (typeof process !== "undefined" && (process as any).env?.VITE_API_BASE),
+    (typeof process !== "undefined" && (process as any).env?.REACT_APP_API_BASE_URL),
+  ];
 
-  // Coerce to string safely (guards against number/object/bool)
-  const raw = vite ?? cra ?? "/api";
-  const base = typeof raw === "string" ? raw : String(raw);
-
-  const trimmed = base.trim();
-  if (!trimmed) return "/api";
-
-  // Strip trailing slashes so we can concat paths consistently
-  return trimmed.replace(/\/+$/, "");
+  const raw = candidates.find(v => v !== undefined && v !== null && v !== "") ?? "/api";
+  let base = typeof raw === "string" ? raw : String(raw);
+  base = base.trim();
+  if (!base) return "/api";
+  return base.replace(/\/+$/, ""); // strip trailing slashes
 }
 
 const API_BASE = resolveApiBase();
@@ -56,20 +54,20 @@ export interface ExamSearchParams {
   page?: number;
   size?: number;
   sort?: string;            // e.g. "startTime,asc"
-  // (future) year?: number;
-  // (future) semester?: string;
 }
 
 // ---- Helpers ----
 type Dict = Record<string, unknown>;
 
-function qs(obj: Dict): string {
+function buildQuery(obj: Dict | undefined): string {
+  if (!obj) return "";
   const sp = new URLSearchParams();
   for (const [k, v] of Object.entries(obj)) {
     if (v === undefined || v === null || v === "") continue;
     sp.append(k, String(v));
   }
-  return sp.toString();
+  const q = sp.toString();
+  return q ? `?${q}` : "";
 }
 
 function withTimeout(ms = 15000) {
@@ -79,8 +77,7 @@ function withTimeout(ms = 15000) {
 }
 
 async function getJson<T>(path: string, params?: Dict): Promise<T> {
-  const q = params && Object.keys(params).length ? `?${qs(params)}` : "";
-  const url = `${API_BASE}${path}${q}`;
+  const url = `${API_BASE}${path}${buildQuery(params)}`;
   const t = withTimeout();
 
   try {
@@ -88,11 +85,12 @@ async function getJson<T>(path: string, params?: Dict): Promise<T> {
       method: "GET",
       headers: { Accept: "application/json" },
       signal: t.signal,
-      credentials: "include", // safe default; remove if not using cookies
+      credentials: "omit", // avoid CORS/cookie issues on Vercel
+      mode: "cors",
     });
     if (!res.ok) {
       const text = await res.text().catch(() => res.statusText);
-      throw new Error(`GET ${path} failed: ${res.status} ${text}`);
+      throw new Error(`GET ${path} → ${res.status}: ${text}`);
     }
     return res.json() as Promise<T>;
   } finally {
@@ -106,9 +104,11 @@ export class ApiService {
   static async getSubjects(campus: string = "V"): Promise<string[]> {
     return getJson<string[]>("/meta/subjects", { campus });
   }
+
   static async getCourses(campus: string = "V", subject: string): Promise<string[]> {
     return getJson<string[]>("/meta/courses", { campus, subject });
   }
+
   static async getSections(campus: string = "V", subject: string, course: string): Promise<string[]> {
     return getJson<string[]>("/meta/sections", { campus, subject, course });
   }
@@ -127,20 +127,20 @@ export class ApiService {
 
   // ICS URLs
   static getIcsDownloadUrlByIds(ids: number[], filename?: string): string {
-    const query: Dict = { ids: ids.join(",") };
-    if (filename && filename.trim()) query.filename = filename.trim();
-    return `${API_BASE}/exams/ics?${qs(query)}`;
+    const q: Dict = { ids: ids.join(",") };
+    if (filename && filename.trim()) q.filename = filename.trim();
+    return `${API_BASE}/exams/ics${buildQuery(q)}`;
   }
 
   static getIcsDownloadUrlByFilter(params: ExamSearchParams, filename?: string): string {
-    const query: Dict = {
+    const q: Dict = {
       campus: params.campus ?? "V",
       subject: params.subject,
       course: params.course,
       section: params.section,
     };
-    if (filename && filename.trim()) query.filename = filename.trim();
-    return `${API_BASE}/exams/ics?${qs(query)}`;
+    if (filename && filename.trim()) q.filename = filename.trim();
+    return `${API_BASE}/exams/ics${buildQuery(q)}`;
   }
 
   // Trigger download
