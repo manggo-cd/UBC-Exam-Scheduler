@@ -1,17 +1,14 @@
 import React from "react";
 
 type Props = { children: React.ReactNode };
-type State = { hasError: boolean; error?: Error };
+type State = { hasError: boolean; error?: unknown };
 
 export class ErrorBoundary extends React.Component<Props, State> {
-  constructor(props: Props) {
-    super(props);
-    this.state = { hasError: false };
-  }
-  static getDerivedStateFromError(error: Error) {
+  state: State = { hasError: false, error: undefined };
+  static getDerivedStateFromError(error: unknown): State {
     return { hasError: true, error };
   }
-  componentDidCatch(error: Error, info: React.ErrorInfo) {
+  componentDidCatch(error: unknown, info: React.ErrorInfo) {
     console.error("ErrorBoundary caught:", error, info);
   }
   render() {
@@ -19,8 +16,8 @@ export class ErrorBoundary extends React.Component<Props, State> {
       return (
         <div style={{ padding: 16, fontFamily: "system-ui" }}>
           <h1>Something went wrong.</h1>
-          <pre style={{ whiteSpace: "pre-wrap" }}>
-            {String(this.state.error?.message || this.state.error)}
+          <pre style={{ whiteSpace: "pre-wrap", color: "#c00", background: "#fff3f3", padding: 12, border: "1px solid #f0caca" }}>
+            {String(this.state.error)}
           </pre>
         </div>
       );
