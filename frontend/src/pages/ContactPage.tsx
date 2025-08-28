@@ -102,7 +102,7 @@ export default function ContactPage() {
                       This tool was built by a UBC student for UBC students. We're always looking to improve!
                     </p>
                     <div className="flex space-x-3">
-                      <Button variant="outline" size="sm" onClick={() => window.open("https://github.com/danielzhou-nc", "_blank")}>
+                      <Button variant="outline" size="sm" onClick={() => window.open("https://github.com/manggo-cd", "_blank")}>
                         <Github className="w-4 h-4 mr-1" />
                         GitHub
                       </Button> 
