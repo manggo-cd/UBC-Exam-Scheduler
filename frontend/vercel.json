@@ -1,0 +1,17 @@
+{
+    "framework": "vite",
+    "buildCommand": "npm run build",
+    "outputDirectory": "dist",
+  
+    "rewrites": [
+      {
+        "source": "/api/(.*)",
+        "destination": "https://YOUR-BACKEND-DOMAIN/api/$1"
+      }
+    ],
+    "routes": [
+      { "handle": "filesystem" },
+      { "src": "/.*", "dest": "/" }
+    ]
+  }
+  
