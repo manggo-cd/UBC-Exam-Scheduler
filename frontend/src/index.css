@@ -2,12 +2,14 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
-All colors MUST be HSL.
-*/
+/* ------------------------------------------------------------------
+   UBC Exam Scheduler – Global theme tokens (HSL) + sensible resets
+   ------------------------------------------------------------------ */
 
 @layer base {
   :root {
+    color-scheme: light;
+
     --background: 0 0% 100%;
     --foreground: 210 100% 13%;
 
@@ -36,41 +38,39 @@ All colors MUST be HSL.
     --input: 214 32% 91%;
     --ring: 210 100% 13%;
 
+    /* UBC brand helpers */
     --ubc-blue: 210 100% 13%;
     --ubc-blue-light: 210 100% 35%;
     --ubc-gold: 45 100% 51%;
     --ubc-navy: 210 100% 8%;
-    
+
+    /* Gradients (use with classes below) */
     --gradient-primary: linear-gradient(135deg, hsl(var(--ubc-blue)), hsl(var(--ubc-blue-light)));
     --gradient-accent: linear-gradient(135deg, hsl(var(--ubc-gold)), hsl(45 100% 60%));
     --gradient-subtle: linear-gradient(180deg, hsl(var(--background)), hsl(210 40% 99%));
-    
+
+    /* Shadows */
     --shadow-elegant: 0 10px 30px -10px hsl(var(--ubc-blue) / 0.15);
     --shadow-card: 0 4px 20px -4px hsl(var(--ubc-blue) / 0.1);
     --shadow-glow: 0 0 40px hsl(var(--ubc-gold) / 0.3);
-    
-    --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 
+    --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     --radius: 0.5rem;
 
+    /* Sidebar palette */
     --sidebar-background: 0 0% 98%;
-
     --sidebar-foreground: 240 5.3% 26.1%;
-
     --sidebar-primary: 240 5.9% 10%;
-
     --sidebar-primary-foreground: 0 0% 98%;
-
     --sidebar-accent: 240 4.8% 95.9%;
-
     --sidebar-accent-foreground: 240 5.9% 10%;
-
     --sidebar-border: 220 13% 91%;
-
     --sidebar-ring: 217.2 91.2% 59.8%;
   }
 
   .dark {
+    color-scheme: dark;
+
     --background: 210 100% 8%;
     --foreground: 0 0% 98%;
 
@@ -98,6 +98,7 @@ All colors MUST be HSL.
     --border: 210 20% 20%;
     --input: 210 20% 20%;
     --ring: 45 100% 51%;
+
     --sidebar-background: 240 5.9% 10%;
     --sidebar-foreground: 240 4.8% 95.9%;
     --sidebar-primary: 224.3 76.3% 48%;
@@ -107,14 +108,39 @@ All colors MUST be HSL.
     --sidebar-border: 240 3.7% 15.9%;
     --sidebar-ring: 217.2 91.2% 59.8%;
   }
-}
 
-@layer base {
+  /* Tailwind base extension */
   * {
     @apply border-border;
   }
 
+  html, body, #root {
+    height: 100%;
+  }
+
   body {
     @apply bg-background text-foreground;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
+
+  /* Selection color for better polish */
+  ::selection {
+    background: hsl(var(--ubc-gold) / 0.35);
+  }
+
+  /* Make headings slightly tighter by default */
+  h1,h2,h3,h4,h5,h6 { @apply tracking-tight; }
+}
+
+/* Small convenience utilities that use the custom tokens */
+@layer utilities {
+  .bg-gradient-primary { background: var(--gradient-primary); }
+  .bg-gradient-accent { background: var(--gradient-accent); }
+  .bg-gradient-subtle { background: var(--gradient-subtle); }
+
+  .shadow-elegant { box-shadow: var(--shadow-elegant); }
+  .shadow-card { box-shadow: var(--shadow-card); }
+  .shadow-glow { box-shadow: var(--shadow-glow); }
 }

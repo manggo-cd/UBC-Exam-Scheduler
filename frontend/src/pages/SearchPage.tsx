@@ -1,5 +1,4 @@
 import { useState, useEffect } from "react";
-import { Navbar } from "@/components/layout/Navbar";
 import { ExamFilters, type ExamFilters as ExamFiltersType } from "@/components/exam/ExamFilters";
 import { ExamResults } from "@/components/exam/ExamResults";
 import { useToast } from "@/hooks/use-toast";
@@ -67,7 +66,6 @@ export default function SearchPage() {
 
   return (
     <div className="min-h-screen bg-gradient-subtle">
-      <Navbar />
       
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="space-y-6">

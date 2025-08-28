@@ -1,6 +1,5 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Navbar } from "@/components/layout/Navbar";
 import { Calendar, Search, Download, BookOpen, Clock, Users } from "lucide-react";
 import { Link } from "react-router-dom";
 
@@ -31,7 +30,6 @@ const Index = () => {
 
   return (
     <div className="min-h-screen bg-gradient-subtle">
-      <Navbar />
       
       {/* Hero Section */}
       <section className="relative py-20 overflow-hidden">

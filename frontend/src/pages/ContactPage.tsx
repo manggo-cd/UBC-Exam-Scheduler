@@ -1,4 +1,3 @@
-import { Navbar } from "@/components/layout/Navbar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,7 +8,6 @@ import { Mail, Github, MessageSquare, Send } from "lucide-react";
 export default function ContactPage() {
   return (
     <div className="min-h-screen bg-gradient-subtle">
-      <Navbar />
       
       <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="space-y-8">
@@ -43,7 +41,7 @@ export default function ContactPage() {
                   <Input
                     id="email"
                     type="email"
-                    placeholder="your.email@student.ubc.ca"
+                    placeholder="Email Address"
                   />
                 </div>
                 <div className="space-y-2">
@@ -85,18 +83,11 @@ export default function ContactPage() {
                       For technical support or general inquiries
                     </p>
                     <a
-                      href="mailto:support@ubcexamscheduler.com"
+                      href="mailto:danielzhou.nc@gmail.com"
                       className="text-primary hover:underline"
                     >
-                      support@ubcexamscheduler.com
+                      danielzhou.nc@gmail.com
                     </a>
-                  </div>
-                  
-                  <div>
-                    <h3 className="font-medium mb-2">Office Hours</h3>
-                    <p className="text-muted-foreground">
-                      Monday - Friday: 9:00 AM - 5:00 PM PST
-                    </p>
                   </div>
                 </CardContent>
               </Card>
@@ -108,13 +99,13 @@ export default function ContactPage() {
                 <CardContent className="space-y-4">
                   <div>
                     <p className="text-muted-foreground mb-4">
-                      This tool was built by UBC students for UBC students. We're always looking to improve!
+                      This tool was built by a UBC student for UBC students. We're always looking to improve!
                     </p>
                     <div className="flex space-x-3">
-                      <Button variant="outline" size="sm">
+                      <Button variant="outline" size="sm" onClick={() => window.open("https://github.com/manggo-cd", "_blank")}>
                         <Github className="w-4 h-4 mr-1" />
                         GitHub
-                      </Button>
+                      </Button> 
                       <Button variant="outline" size="sm">
                         <MessageSquare className="w-4 h-4 mr-1" />
                         Feedback
