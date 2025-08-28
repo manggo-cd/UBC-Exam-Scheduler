@@ -1,58 +1,42 @@
 # UBC Planner
 
-A comprehensive CRUD app for finals scheduling application at the University of British Columbia students.
+This project is a comprehensive exam scheduler designed for UBC, benefiting over 30,000 students. It utilizes a PostgreSQL database to store all exam-related information, a Spring Boot application to create a RESTful API for the backend, and a ReactJS frontend for intuitive user interaction.
 
-## Project Structure
+---
 
-```
-ubc-planner/
-├─ README.md                    ← This file
-├─ .gitignore                  ← Git ignore rules
-├─ .editorconfig               ← Editor configuration
-├─ backend/                    ← Spring Boot application
-│  ├─ pom.xml                 ← Maven configuration
-│  └─ src/                    ← Source code
-├─ frontend/                   ← Angular frontend (coming soon)
-│  └─ README.md               ← Frontend documentation
-└─ infra/                      ← Infrastructure configuration
-   └─ README.md               ← Infrastructure documentation
-```
+## Visit The Site
+Feel free to check out the [project here!](https://ubc-scheduler.vercel.app/). We are still in the process of accessing live data, so temporary data is utilized for testing purposes.
+<img width="3014" height="1870" alt="image" src="https://github.com/user-attachments/assets/22ff2966-34db-4a40-9c2f-08d92d25ca30" />
 
-## Getting Started
 
-### Backend
-The backend is a Spring Boot application that can be run immediately.
+---
+
+## Features
+
+- **PostgreSQL (Neon in prod):** Stores exams (course/section, date/time, building/room, duration).
+- **Spring Boot Backend:** RESTful API, JPA, Flyway migrations, ICS export endpoint.
+- **React Frontend (Vite + Tailwind):** Search by Subject → Course → Section, build “My Schedule,” export **.ics**.
+- **Importer:** Admin routes to ingest sample HTML or uploaded HTML (CSV/live support ready to plug in).
+- **Docker:** Containerized backend + local Postgres via Docker Compose.
+
+---
+
+## Prerequisites
+
+- **Java 17+**
+- **Node 18+ & npm**
+- **Docker Desktop** (for the one-command local stack)  
+  *or* **PostgreSQL** installed locally if running services manually
+
+---
+
+## Installation
+
+### Option A — One-command local dev (recommended)
 
 ```bash
-cd backend
-mvn clean install
-mvn spring-boot:run
-```
+git clone https://github.com/manggo-cd/UBC-Exam-Scheduler.git
+cd UBC-Exam-Scheduler/infra
 
-The backend will be available at `http://localhost:8080`
-
-### Frontend
-Frontend development will begin soon with Angular.
-
-### Infrastructure
-Database and Docker configurations will be added to the infra folder.
-
-## Development
-
-This project uses:
-- **Backend**: Spring Boot 3.2.0, Java 17
-- **Frontend**: Angular (coming soon)
-- **Build Tool**: Maven
-- **Database**: TBD
-- **Containerization**: Docker (coming soon)
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Submit a pull request
-
-## License
-
-[License information to be added]
+# Start DB + backend + frontend
+docker compose up --build
