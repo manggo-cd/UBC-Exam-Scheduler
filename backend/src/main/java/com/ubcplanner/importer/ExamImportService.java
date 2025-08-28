@@ -24,7 +24,7 @@ public class ExamImportService {
 
   private static final Logger log = LoggerFactory.getLogger(ExamImportService.class);
 
-  @Value("${ubc.exams.searchUrl}")
+  @Value("${ubc.exams.searchUrl:}")
   private String searchUrl;
 
   private final ExamRepository repo;
